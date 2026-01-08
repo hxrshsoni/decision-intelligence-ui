@@ -1,134 +1,195 @@
 import React, { useState } from 'react';
-import { dataAPI } from '../services/api';
-import Card from '../components/common/Card';
-import Button from '../components/common/Button';
-import { Upload, CheckCircle, XCircle } from 'lucide-react';
-import Header from '../components/layout/Header';
-import Sidebar from '../components/layout/Sidebar';
+import axios from 'axios';
 
 const UploadPage = () => {
-  const [uploading, setUploading] = useState(false);
-  const [uploadResults, setUploadResults] = useState({});
+  const [file, setFile] = useState(null);
+  const [uploadType, setUploadType] = useState('transactions');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
-  const handleFileUpload = async (type, file) => {
-    if (!file) return;
+  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-    setUploading(true);
+  const uploadTypes = [
+    { value: 'transactions', label: 'Transactions', icon: '💳' },
+    { value: 'budgets', label: 'Budgets', icon: '💰' },
+    { value: 'goals', label: 'Goals', icon: '🎯' },
+    { value: 'subscriptions', label: 'Subscriptions', icon: '📱' },
+  ];
+
+  const handleFileChange = (e) => {
+    setFile(e.target.files[0]);
+    setMessage('');
+    setError('');
+  };
+
+  const handleUpload = async () => {
+    if (!file) {
+      setError('Please select a file');
+      return;
+    }
+
     try {
-      let response;
-      if (type === 'clients') response = await dataAPI.uploadClients(file);
-      if (type === 'engagements') response = await dataAPI.uploadEngagements(file);
-      if (type === 'payments') response = await dataAPI.uploadPayments(file);
-      if (type === 'work-requests') response = await dataAPI.uploadWorkRequests(file);
+      setLoading(true);
+      setError('');
+      setMessage('');
 
-      setUploadResults(prev => ({
-        ...prev,
-        [type]: {
-          success: true,
-          message: response.data.message,
-          data: response.data.data
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        `${API_URL}/api/data/upload/${uploadType}`,
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data',
+          },
         }
-      }));
-    } catch (error) {
-      setUploadResults(prev => ({
-        ...prev,
-        [type]: {
-          success: false,
-          message: error.response?.data?.error || 'Upload failed'
-        }
-      }));
+      );
+
+      setMessage(response.data.message || 'File uploaded successfully!');
+      setFile(null);
+      // Reset file input
+      document.getElementById('fileInput').value = '';
+    } catch (err) {
+      setError(err.response?.data?.error || 'Upload failed. Please try again.');
     } finally {
-      setUploading(false);
+      setLoading(false);
     }
   };
 
-  const UploadSection = ({ type, title, description }) => {
-    const result = uploadResults[type];
-
-    return (
-      <Card className="mb-6">
-        <h3 className="text-lg font-bold text-gray-800 mb-2">{title}</h3>
-        <p className="text-sm text-gray-600 mb-4">{description}</p>
-        
-        <div className="flex items-center gap-4">
-          <label className="flex-1">
-            <input
-              type="file"
-              accept=".csv"
-              onChange={(e) => handleFileUpload(type, e.target.files[0])}
-              disabled={uploading}
-              className="hidden"
-            />
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 transition-colors">
-              <Upload size={32} className="mx-auto text-gray-400 mb-2" />
-              <p className="text-sm text-gray-600">Click to upload CSV file</p>
-            </div>
-          </label>
+  return (
+    <div className="p-8">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-gray-800 mb-2">Upload Data</h1>
+          <p className="text-gray-600">Import your financial data from CSV files</p>
         </div>
 
-        {result && (
-          <div className={`mt-4 p-4 rounded-lg ${result.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-            <div className="flex items-center gap-2">
-              {result.success ? (
-                <CheckCircle size={20} className="text-green-600" />
-              ) : (
-                <XCircle size={20} className="text-red-600" />
-              )}
-              <p className={`font-semibold ${result.success ? 'text-green-800' : 'text-red-800'}`}>
-                {result.message}
-              </p>
+        {/* Upload Card */}
+        <div className="bg-white rounded-xl shadow-lg p-8">
+          {/* Upload Type Selection */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Select Data Type
+            </label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {uploadTypes.map((type) => (
+                <button
+                  key={type.value}
+                  onClick={() => setUploadType(type.value)}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    uploadType === type.value
+                      ? 'border-blue-500 bg-blue-50 shadow-md'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="text-3xl mb-2">{type.icon}</div>
+                  <div className="text-sm font-medium">{type.label}</div>
+                </button>
+              ))}
             </div>
-            {result.data && (
-              <div className="mt-2 text-sm text-gray-700">
-                <p>Total rows: {result.data.totalRows}</p>
-                <p>Inserted: {result.data.inserted}</p>
-                <p>Skipped: {result.data.skipped}</p>
-              </div>
+          </div>
+
+          {/* File Upload Area */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Choose CSV File
+            </label>
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors">
+              <input
+                id="fileInput"
+                type="file"
+                accept=".csv"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <label
+                htmlFor="fileInput"
+                className="cursor-pointer flex flex-col items-center"
+              >
+                <svg
+                  className="w-16 h-16 text-gray-400 mb-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                  />
+                </svg>
+                <span className="text-lg font-medium text-gray-700">
+                  {file ? file.name : 'Click to browse or drag and drop'}
+                </span>
+                <span className="text-sm text-gray-500 mt-2">CSV files only</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Messages */}
+          {message && (
+            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
+              ✅ {message}
+            </div>
+          )}
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+              ❌ {error}
+            </div>
+          )}
+
+          {/* Upload Button */}
+          <button
+            onClick={handleUpload}
+            disabled={!file || loading}
+            className={`w-full py-3 px-6 rounded-lg font-semibold text-white transition-all ${
+              !file || loading
+                ? 'bg-gray-300 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl'
+            }`}
+          >
+            {loading ? (
+              <span className="flex items-center justify-center">
+                <svg className="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24">
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                Uploading...
+              </span>
+            ) : (
+              '📤 Upload File'
             )}
+          </button>
+        </div>
+
+        {/* CSV Format Guide */}
+        <div className="mt-8 bg-blue-50 rounded-xl p-6">
+          <h3 className="font-bold text-gray-800 mb-3">📋 CSV Format Guide</h3>
+          <div className="text-sm text-gray-700 space-y-2">
+            <p><strong>Transactions:</strong> amount, category, description, date, type (income/expense)</p>
+            <p><strong>Budgets:</strong> category, amount, period (monthly/yearly)</p>
+            <p><strong>Goals:</strong> name, target_amount, deadline, current_amount</p>
+            <p><strong>Subscriptions:</strong> name, amount, billing_cycle, next_billing_date</p>
           </div>
-        )}
-      </Card>
-    );
-  };
-
-  return (
-    <div className="flex h-screen bg-gray-50">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
-        
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-4xl mx-auto">
-            <div className="mb-8">
-              <h2 className="text-3xl font-bold text-gray-800">Upload Data</h2>
-              <p className="text-gray-600 mt-1">Import your business data via CSV files</p>
-            </div>
-
-            <UploadSection
-              type="clients"
-              title="Upload Clients"
-              description="CSV with columns: name, email, contract_value, start_date, status"
-            />
-
-            <UploadSection
-              type="engagements"
-              title="Upload Engagements"
-              description="CSV with columns: client_name, type, date, notes"
-            />
-
-            <UploadSection
-              type="payments"
-              title="Upload Payments"
-              description="CSV with columns: client_name, amount, due_date, paid_date, status"
-            />
-
-            <UploadSection
-              type="work-requests"
-              title="Upload Work Requests"
-              description="CSV with columns: client_name, request_type, effort_hours, revenue_generated"
-            />
-          </div>
-        </main>
+        </div>
       </div>
     </div>
   );
